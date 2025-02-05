@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Application Photographie Consultation Professeur Hidan</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+      background: #f7f7f7;
+    }
+    h1 {
+      margin-bottom: 10px;
+    }
+    /* Styles pour le formulaire patient */
+    #patientForm {
+      max-width: 400px;
+      margin: 20px auto;
+      padding: 20px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background: #fff;
+    }
+    #patientForm input,
+    #patientForm textarea {
+      width: 90%;
+      padding: 8px;
+      margin: 8px 0;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    #patientForm button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+    /* Zone d'instructions */
+    #instruction {
+      margin-bottom: 10px;
+      font-size: 18px;
+    }
+    /* Zone des critères de bon cliché */
+    #criteria {
+      margin-bottom: 20px;
+      font-size: 16px;
+      color: #555;
+    }
+    /* Conteneur de la vidéo avec fond uniforme */
+    .video-container {
+      position: relative;
+      display: inline-block;
+      background-color: #a0a0a0; /* Fond gris (ou changez par #007bff pour bleu) */
+      padding: 10px;
+    }
+    /* Vidéo avec une bordure */
+    #video {
+      width: 80%;
+      max-width: 600px;
+      border: 2px solid #ccc;
+      border-radius: 8px;
+    }
+    /* Overlay pour les repères/guides */
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .overlay .line {
+      position: absolute;
+      background: rgba(255, 0, 0, 0.5);
+    }
+    /* Exemple de lignes : horizontale et verticale au centre */
+    .overlay .h-line {
+      top: 50%;
+      left: 0;
+      width: 100%;
+      height: 2px;
+    }
+    .overlay .v-line {
+      left: 50%;
+      top: 0;
+      width: 2px;
+      height: 100%;
+    }
+    /* Zone de contrôles caméra (zoom et flash) */
+    #cameraControls {
+      margin-top: 10px;
+    }
+    #zoomControl {
+      display: none;
+    }
+    #flashToggle {
+      display: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      margin-left: 10px;
+      cursor: pointer;
+    }
+    /* Boutons pour capture, reprise et validation */
+    #buttons {
+      margin-top: 20px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin: 10px;
+      cursor: pointer;
+    }
+    /* Zone d'aperçu de la capture en cours */
+    #currentPreviewContainer {
+      margin-top: 20px;
+      display: none;
+    }
+    #currentPreview {
+      width: 150px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    /* Galerie pour aperçu final */
+    #gallery {
+      margin-top: 30px;
+    }
+    .thumb {
+      width: 150px;
+      margin: 5px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    /* Cache la zone principale de l'app jusqu'à la saisie des infos patient */
+    #mainApp {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Application Photographie Consultation Professeur Hidan</h1>
+
+  <!-- Formulaire de saisie des informations patient -->
+  <div id="patientForm">
+    <h2>Informations Patient</h2>
+    <input type="text" id="patientName" placeholder="Nom du patient" required />
+    <br>
+    <textarea id="diagnosis" placeholder="Diagnostic" rows="3" required></textarea>
+    <br>
+    <input type="date" id="consultationDate" required />
+    <br>
+    <button id="startAppBtn">Démarrer la consultation</button>
+  </div>
+
+  <!-- Zone principale de l'application -->
+  <div id="mainApp">
+    <!-- Affichage des informations du patient -->
+    <div id="patientInfo" style="margin-bottom:20px;"></div>
+    
+    <!-- Zone d'instructions -->
+    <div id="instruction">
+      <h2 id="instructionTitle"></h2>
+      <p id="instructionDesc"></p>
+    </div>
+    
+    <!-- Zone rappelant les critères de bon cliché -->
+    <div id="criteria">
+      <p><em>Veuillez utiliser un fond bleu ou gris et régler la focale de votre appareil photo sur 100 (numérique).</em></p>
+    </div>
+    
+    <!-- Zone vidéo avec overlay pour repères -->
+    <div class="video-container">
+      <video id="video" autoplay playsinline></video>
+      <div class="overlay">
+        <div class="line h-line"></div>
+        <div class="line v-line"></div>
+      </div>
+    </div>
+    
+    <!-- Contrôles optionnels de la caméra (zoom et flash) -->
+    <div id="cameraControls">
+      <div id="zoomControl">
+        <label for="zoomSlider">Zoom:</label>
+        <input type="range" id="zoomSlider" min="1" max="1" step="0.1" value="1">
+      </div>
+      <button id="flashToggle">Flash Off</button>
+    </div>
+    
+    <!-- Boutons pour capture, reprise et validation -->
+    <div id="buttons">
+      <button id="captureBtn">Capturer l'image</button>
+      <button id="retryBtn" style="display: none;">Reprendre</button>
+      <button id="validateBtn" style="display: none;">Valider</button>
+    </div>
+    
+    <!-- Zone d'aperçu de la capture actuelle -->
+    <div id="currentPreviewContainer">
+      <h3>Aperçu de la capture</h3>
+      <img id="currentPreview" src="" alt="Aperçu de la capture">
+    </div>
+    
+    <!-- Galerie des images capturées -->
+    <div id="gallery"></div>
+    
+    <!-- Bouton de sauvegarde -->
+    <div id="saveContainer" style="margin-top:20px; display:none;">
+      <button id="saveBtn">Sauvegarder (Télécharger ZIP)</button>
+    </div>
+    
+    <!-- Canvas caché pour la capture -->
+    <canvas id="canvas" style="display: none;"></canvas>
+  </div>
+  
+  <!-- Inclusion des bibliothèques JSZip et FileSaver -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  
+  <script>
+    // --- Gestion du formulaire patient ---
+    const patientForm = document.getElementById('patientForm');
+    const startAppBtn = document.getElementById('startAppBtn');
+    const mainApp = document.getElementById('mainApp');
+    const patientInfoDiv = document.getElementById('patientInfo');
+
+    // Variables globales pour les informations patient
+    let patientName = "";
+    let diagnosis = "";
+    let consultationDate = "";
+
+    startAppBtn.addEventListener('click', () => {
+      patientName = document.getElementById('patientName').value.trim();
+      diagnosis   = document.getElementById('diagnosis').value.trim();
+      consultationDate = document.getElementById('consultationDate').value;
+      
+      if (!patientName || !diagnosis || !consultationDate) {
+        alert("Veuillez remplir toutes les informations.");
+        return;
+      }
+      
+      // Affichage des informations patient
+      patientInfoDiv.innerHTML = `
+        <strong>Patient :</strong> ${patientName} <br>
+        <strong>Diagnostic :</strong> ${diagnosis} <br>
+        <strong>Date de consultation :</strong> ${consultationDate}
+      `;
+      
+      // Cacher le formulaire et afficher l'application principale
+      patientForm.style.display = "none";
+      mainApp.style.display = "block";
+    });
+    
+    // --- Partie Application de prise de vue ---
+    
+    // Instructions pour chaque prise de vue
+    const instructions = [
+      { title: "Visage de face", description: "Visage entier au repos de face." },
+      { title: "Bandeau orbitaire", description: "Tiers supérieur de la face incluant la moitié du front et la pointe du nez (hors orifices narinaires)." },
+      { title: "Regard vers le haut", description: "Face au repos, regard dirigé vers le haut." },
+      { title: "Regard vers le bas", description: "Face au repos, regard dirigé vers le bas." },
+      { title: "Profil droit", description: "Profil droit complet." },
+      { title: "Profil gauche", description: "Profil gauche complet." },
+      { title: "Trois quarts", description: "Vue en trois quarts des deux côtés avec regard droit (l’orbite opposée doit être visible)." }
+    ];
+    
+    let currentStep = 0;         // Étape actuelle
+    const capturedImages = [];     // Tableau pour stocker les images capturées
+    
+    // Sélection des éléments HTML pour la partie capture
+    const instructionTitle = document.getElementById('instructionTitle');
+    const instructionDesc  = document.getElementById('instructionDesc');
+    const video            = document.getElementById('video');
+    const canvas           = document.getElementById('canvas');
+    const captureBtn       = document.getElementById('captureBtn');
+    const retryBtn         = document.getElementById('retryBtn');
+    const validateBtn      = document.getElementById('validateBtn');
+    const gallery          = document.getElementById('gallery');
+    const saveContainer    = document.getElementById('saveContainer');
+    const saveBtn          = document.getElementById('saveBtn');
+    const currentPreviewContainer = document.getElementById('currentPreviewContainer');
+    const currentPreview   = document.getElementById('currentPreview');
+    const zoomControl      = document.getElementById('zoomControl');
+    const zoomSlider       = document.getElementById('zoomSlider');
+    const flashToggle      = document.getElementById('flashToggle');
+    
+    // Mise à jour de l'affichage de l'instruction courante
+    function updateInstruction() {
+      if (currentStep < instructions.length) {
+        instructionTitle.textContent = instructions[currentStep].title;
+        instructionDesc.textContent  = instructions[currentStep].description;
+        retryBtn.style.display = "none";
+        validateBtn.style.display = "none";
+        currentPreviewContainer.style.display = "none";
+      } else {
+        instructionTitle.textContent = "Fin du bilan photographique";
+        instructionDesc.textContent  = "Toutes les photos ont été capturées.";
+        captureBtn.style.display = "none";
+        retryBtn.style.display = "none";
+        validateBtn.style.display = "none";
+        displayGallery();
+        saveContainer.style.display = "block";
+      }
+    }
+    
+    // Affiche la galerie des images capturées
+    function displayGallery() {
+      gallery.innerHTML = "<h2>Images capturées :</h2>";
+      capturedImages.forEach((imgDataUrl, index) => {
+        const img = document.createElement("img");
+        img.src = imgDataUrl;
+        img.alt = instructions[index].title;
+        img.className = "thumb";
+        gallery.appendChild(img);
+      });
+    }
+    
+    // Initialisation de la caméra en utilisant la caméra arrière
+    let videoTrack;
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: { ideal: "environment" } } 
+      })
+      .then(stream => {
+        video.srcObject = stream;
+        video.play();
+        // Récupérer la première piste vidéo
+        videoTrack = stream.getVideoTracks()[0];
+        // Vérifier les capacités de zoom et de flash
+        const capabilities = videoTrack.getCapabilities();
+        // Zoom
+        if (capabilities.zoom) {
+          zoomControl.style.display = "inline-block";
+          zoomSlider.min = capabilities.zoom.min;
+          zoomSlider.max = capabilities.zoom.max;
+          zoomSlider.step = capabilities.zoom.step || 0.1;
+          zoomSlider.value = videoTrack.getSettings().zoom || capabilities.zoom.min;
+          zoomSlider.addEventListener('input', () => {
+            videoTrack.applyConstraints({ advanced: [{ zoom: zoomSlider.value }] });
+          });
+        }
+        // Flash (torch)
+        if (capabilities.torch) {
+          flashToggle.style.display = "inline-block";
+          let flashOn = false;
+          flashToggle.addEventListener('click', () => {
+            flashOn = !flashOn;
+            videoTrack.applyConstraints({ advanced: [{ torch: flashOn }] });
+            flashToggle.textContent = flashOn ? "Flash On" : "Flash Off";
+          });
+        }
+      })
+      .catch(error => {
+        console.error("Erreur lors de l'accès à la caméra :", error);
+        alert("Impossible d'accéder à la caméra.");
+      });
+    } else {
+      alert("getUserMedia n'est pas supporté par votre navigateur.");
+    }
+    
+    // Fonction qui capture l'image courante
+    function captureImage() {
+      const context = canvas.getContext('2d');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/png');
+    }
+    
+    // Bouton "Capturer l'image"
+    captureBtn.addEventListener('click', () => {
+      const imageUrl = captureImage();
+      capturedImages[currentStep] = imageUrl;
+      console.log("Image capturée pour", instructions[currentStep].title, ":", imageUrl);
+      // Afficher l'aperçu de la capture
+      currentPreview.src = imageUrl;
+      currentPreviewContainer.style.display = "block";
+      // Afficher les boutons "Reprendre" et "Valider"
+      retryBtn.style.display = "inline-block";
+      validateBtn.style.display = "inline-block";
+    });
+    
+    // Bouton "Reprendre" : réinitialise la capture pour l'étape courante
+    retryBtn.addEventListener('click', () => {
+      capturedImages[currentStep] = null;
+      retryBtn.style.display = "none";
+      validateBtn.style.display = "none";
+      currentPreviewContainer.style.display = "none";
+      console.log("Capture réinitialisée pour", instructions[currentStep].title);
+    });
+    
+    // Bouton "Valider" : confirme la capture et passe à l'étape suivante
+    validateBtn.addEventListener('click', () => {
+      if (capturedImages[currentStep]) {
+        currentStep++;
+        updateInstruction();
+      } else {
+        alert("Veuillez capturer l'image avant de valider.");
+      }
+    });
+    
+    // Initialisation de l'instruction à afficher
+    updateInstruction();
+    
+    // Bouton "Sauvegarder" : génère un ZIP contenant toutes les images capturées
+    saveBtn.addEventListener('click', async () => {
+      if (capturedImages.length !== instructions.length) {
+        alert("Certaines images sont manquantes.");
+        return;
+      }
+      const zip = new JSZip();
+      capturedImages.forEach((imgDataUrl, index) => {
+        const base64Data = imgDataUrl.split(',')[1];
+        const fileName = instructions[index].title.replace(/\s+/g, '_') + ".png";
+        zip.file(fileName, base64Data, { base64: true });
+      });
+      
+      // Nom du fichier ZIP incluant le nom du patient, le diagnostic et la date
+      const zipFileName = `photos_${patientName.replace(/\s+/g, '_')}_${diagnosis.replace(/\s+/g, '_')}_${consultationDate}.zip`;
+      zip.generateAsync({ type: "blob" })
+        .then(function(content) {
+          saveAs(content, zipFileName);
+        });
+    });
+  </script>
+</body>
+</html>
