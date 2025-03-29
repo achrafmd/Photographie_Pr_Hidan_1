@@ -62,7 +62,7 @@ let segmenter, track, stream;
 const images = [];
 
 async function initCamera() {
-  stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } });
   video.srcObject = stream;
   await video.play();
   canvas.width = video.videoWidth;
@@ -82,19 +82,18 @@ async function initCamera() {
 async function loadModel() {
   segmenter = new SelfieSegmentation({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}` });
   segmenter.setOptions({ modelSelection: 1 });
-}
-
-async function renderFrame() {
-  await segmenter.send({ image: video });
   segmenter.onResults(results => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = 'source-in';
     ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
     ctx.globalCompositeOperation = 'destination-atop';
-    ctx.fillStyle = '#FFF';
+    ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   });
-  requestAnimationFrame(renderFrame);
 }
+
+function animate() { segmenter.send({ image: video }); requestAnimationFrame(animate); }
 
 function updateInstruction() { document.getElementById('instruction').innerText = `Capture: ${steps[currentStep]}`; }
 
@@ -117,8 +116,8 @@ document.getElementById('startAppBtn').onclick = async () => {
   document.getElementById('patientInfo').innerHTML = `<b>${patientName}</b> | ${diagnosis} | ${consultationDate}`;
   await initCamera();
   await loadModel();
+  animate();
   updateInstruction();
-  renderFrame();
 };
 
 document.getElementById('captureBtn').onclick = showPreview;
