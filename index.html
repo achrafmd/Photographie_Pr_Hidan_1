@@ -13,7 +13,7 @@
     #patientForm { max-width: 400px; margin: 20px auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; background: #fff; }
     #patientForm input, #patientForm textarea { width: 90%; padding: 8px; margin: 8px 0; border: 1px solid #ccc; border-radius: 4px; }
     button { padding: 10px 20px; font-size: 16px; margin: 10px; cursor: pointer; }
-    #outputCanvas { width: 80%; max-width: 600px; border: 2px solid #ccc; border-radius: 8px; }
+    #outputCanvas, #previewCanvas { width: 80%; max-width: 600px; border: 2px solid #ccc; border-radius: 8px; }
     #cameraControls { margin: 10px auto; }
   </style>
 </head>
@@ -31,100 +31,100 @@
 
 <div id="mainApp" style="display:none;">
   <div id="patientInfo"></div>
+  <h3 id="instruction"></h3>
   <canvas id="outputCanvas"></canvas>
   <div id="cameraControls">
     <label>Zoom: <input type="range" id="zoomControl" min="1" max="3" step="0.1" value="1"></label>
     <button id="toggleFlash">Activer Flash</button>
   </div>
   <button id="captureBtn">Capturer l'image</button>
-  <button id="saveBtn">Sauvegarder (Télécharger ZIP)</button>
+  <div id="previewSection" style="display:none;">
+    <h4>Aperçu :</h4>
+    <canvas id="previewCanvas"></canvas><br>
+    <button id="confirmBtn">Confirmer</button>
+    <button id="retryBtn">Refaire</button>
+  </div>
+  <button id="saveBtn" style="display:none;">Sauvegarder (Télécharger ZIP)</button>
 </div>
 
 <script>
+const steps = ["Face repos entier", "Bandeau orbitaire", "Face repos", "Regard haut", "Regard bas", "Profil droit", "Profil gauche", "3/4 droit", "3/4 gauche"];
+let currentStep = 0;
 let patientName, diagnosis, consultationDate;
 const patientForm = document.getElementById('patientForm');
 const mainApp = document.getElementById('mainApp');
 const canvas = document.getElementById('outputCanvas');
+const previewCanvas = document.getElementById('previewCanvas');
 const ctx = canvas.getContext('2d');
+const previewCtx = previewCanvas.getContext('2d');
 const video = document.createElement('video');
-let segmenter, track;
+let segmenter, track, stream;
 const images = [];
 
 async function initCamera() {
-  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
   video.srcObject = stream;
-  await new Promise(resolve => video.onloadedmetadata = resolve);
-  video.play();
+  await video.play();
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
+  previewCanvas.width = video.videoWidth;
+  previewCanvas.height = video.videoHeight;
   track = stream.getVideoTracks()[0];
-  document.getElementById('zoomControl').addEventListener('input', e => {
-    track.applyConstraints({ advanced: [{ zoom: e.target.value }] });
-  });
-  document.getElementById('toggleFlash').addEventListener('click', async () => {
-    const capabilities = track.getCapabilities();
-    if (capabilities.torch) {
-      await track.applyConstraints({ advanced: [{ torch: capabilities.torch }] });
-    } else {
-      alert('Flash non disponible sur cet appareil.');
-    }
-  });
+  document.getElementById('zoomControl').oninput = e => track.applyConstraints({ advanced: [{ zoom: e.target.value }] });
+  let flashOn = false;
+  document.getElementById('toggleFlash').onclick = () => {
+    flashOn = !flashOn;
+    track.applyConstraints({ advanced: [{ torch: flashOn }] });
+    document.getElementById('toggleFlash').textContent = flashOn ? 'Désactiver Flash' : 'Activer Flash';
+  };
 }
 
 async function loadModel() {
   segmenter = new SelfieSegmentation({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}` });
   segmenter.setOptions({ modelSelection: 1 });
-  segmenter.onResults(onResults);
+  segmenter.onResults(results => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = 'source-in';
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = 'destination-atop';
+    ctx.fillStyle = '#FFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  });
+  animate();
 }
 
-function onResults(results) {
-  ctx.save();
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
+function animate() { segmenter.send({ image: video }); requestAnimationFrame(animate); }
 
-  ctx.globalCompositeOperation = 'source-in';
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+function updateInstruction() { document.getElementById('instruction').innerText = `Capture: ${steps[currentStep]}`; }
 
-  ctx.globalCompositeOperation = 'destination-atop';
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.restore();
+function showPreview() {
+  previewCtx.drawImage(canvas, 0, 0);
+  document.getElementById('previewSection').style.display = 'block';
 }
 
-async function renderLoop() {
-  await segmenter.send({ image: video });
-  requestAnimationFrame(renderLoop);
+function nextStep() {
+  currentStep++;
+  if (currentStep >= steps.length) document.getElementById('saveBtn').style.display = 'block';
+  else updateInstruction();
 }
 
 document.getElementById('startAppBtn').onclick = async () => {
   patientName = document.getElementById('patientName').value;
   diagnosis = document.getElementById('diagnosis').value;
   consultationDate = document.getElementById('consultationDate').value;
-  if (!patientName || !diagnosis || !consultationDate) { alert('Remplissez tous les champs.'); return; }
-  patientForm.style.display = 'none';
-  mainApp.style.display = 'block';
-  document.getElementById('patientInfo').innerHTML = `<b>Patient:</b> ${patientName}<br><b>Diagnostic:</b> ${diagnosis}<br><b>Date:</b> ${consultationDate}`;
-  await initCamera();
-  await loadModel();
-  renderLoop();
+  patientForm.style.display = 'none'; mainApp.style.display = 'block';
+  document.getElementById('patientInfo').innerHTML = `<b>${patientName}</b> | ${diagnosis} | ${consultationDate}`;
+  await initCamera(); await loadModel(); updateInstruction();
 };
 
-document.getElementById('captureBtn').onclick = () => {
-  images.push(canvas.toDataURL('image/png'));
-  alert('Image capturée');
-};
-
+document.getElementById('captureBtn').onclick = showPreview;
+document.getElementById('confirmBtn').onclick = () => { images.push(previewCanvas.toDataURL()); document.getElementById('previewSection').style.display = 'none'; nextStep(); };
+document.getElementById('retryBtn').onclick = () => { document.getElementById('previewSection').style.display = 'none'; };
 document.getElementById('saveBtn').onclick = () => {
-  if (!images.length) { alert('Aucune image capturée.'); return; }
-  const zip = new JSZip();
-  images.forEach((img, idx) => {
-    zip.file(`photo_${idx + 1}.png`, img.split(',')[1], { base64: true });
-  });
-  zip.generateAsync({ type: "blob" }).then(content => {
-    saveAs(content, `photos_${patientName}_${diagnosis}_${consultationDate}.zip`);
-  });
+  const zip = new JSZip(); images.forEach((img, idx) => zip.file(`photo_${steps[idx]}.png`, img.split(',')[1], { base64: true }));
+  zip.generateAsync({ type: "blob" }).then(content => saveAs(content, `${patientName}_${diagnosis}_${consultationDate}.zip`));
 };
 </script>
-
 </body>
 </html>
