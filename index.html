@@ -82,6 +82,10 @@ async function initCamera() {
 async function loadModel() {
   segmenter = new SelfieSegmentation({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}` });
   segmenter.setOptions({ modelSelection: 1 });
+}
+
+async function renderFrame() {
+  await segmenter.send({ image: video });
   segmenter.onResults(results => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
@@ -89,10 +93,8 @@ async function loadModel() {
     ctx.fillStyle = '#FFF';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   });
-  animate();
+  requestAnimationFrame(renderFrame);
 }
-
-function animate() { segmenter.send({ image: video }); requestAnimationFrame(animate); }
 
 function updateInstruction() { document.getElementById('instruction').innerText = `Capture: ${steps[currentStep]}`; }
 
@@ -107,8 +109,25 @@ function nextStep() {
   else updateInstruction();
 }
 
-// Remaining code unchanged...
+document.getElementById('startAppBtn').onclick = async () => {
+  patientName = document.getElementById('patientName').value;
+  diagnosis = document.getElementById('diagnosis').value;
+  consultationDate = document.getElementById('consultationDate').value;
+  patientForm.style.display = 'none'; mainApp.style.display = 'block';
+  document.getElementById('patientInfo').innerHTML = `<b>${patientName}</b> | ${diagnosis} | ${consultationDate}`;
+  await initCamera();
+  await loadModel();
+  updateInstruction();
+  renderFrame();
+};
 
+document.getElementById('captureBtn').onclick = showPreview;
+document.getElementById('confirmBtn').onclick = () => { images.push(previewCanvas.toDataURL()); document.getElementById('previewSection').style.display = 'none'; nextStep(); };
+document.getElementById('retryBtn').onclick = () => { document.getElementById('previewSection').style.display = 'none'; };
+document.getElementById('saveBtn').onclick = () => {
+  const zip = new JSZip(); images.forEach((img, idx) => zip.file(`photo_${steps[idx]}.png`, img.split(',')[1], { base64: true }));
+  zip.generateAsync({ type: "blob" }).then(content => saveAs(content, `${patientName}_${diagnosis}_${consultationDate}.zip`));
+};
 </script>
 </body>
 </html>
