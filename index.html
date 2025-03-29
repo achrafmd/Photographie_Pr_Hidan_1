@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Application Photographie Consultation Professeur Hidan</title>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <style>
@@ -13,8 +12,7 @@
     #patientForm { max-width: 400px; margin: 20px auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; background: #fff; }
     #patientForm input, #patientForm textarea { width: 90%; padding: 8px; margin: 8px 0; border: 1px solid #ccc; border-radius: 4px; }
     button { padding: 10px 20px; font-size: 16px; margin: 10px; cursor: pointer; }
-    #outputCanvas, #previewCanvas { width: 80%; max-width: 600px; border: 2px solid #ccc; border-radius: 8px; }
-    #cameraControls { margin: 10px auto; }
+    video, #previewCanvas { width: 80%; max-width: 600px; border: 2px solid #ccc; border-radius: 8px; }
   </style>
 </head>
 <body>
@@ -32,8 +30,8 @@
 <div id="mainApp" style="display:none;">
   <div id="patientInfo"></div>
   <h3 id="instruction"></h3>
-  <canvas id="outputCanvas"></canvas>
-  <div id="cameraControls">
+  <video id="video" autoplay playsinline></video>
+  <div>
     <label>Zoom: <input type="range" id="zoomControl" min="1" max="3" step="0.1" value="1"></label>
     <button id="toggleFlash">Activer Flash</button>
   </div>
@@ -49,49 +47,28 @@
 
 <script>
 const steps = ["Face repos entier", "Bandeau orbitaire", "Face repos", "Regard haut", "Regard bas", "Profil droit", "Profil gauche", "3/4 droit", "3/4 gauche"];
-let currentStep = 0;
-let patientName, diagnosis, consultationDate;
-const patientForm = document.getElementById('patientForm');
-const mainApp = document.getElementById('mainApp');
-const canvas = document.getElementById('outputCanvas');
-const previewCanvas = document.getElementById('previewCanvas');
-const ctx = canvas.getContext('2d');
-const previewCtx = previewCanvas.getContext('2d');
-const video = document.createElement('video');
-let segmenter, track, stream;
+let currentStep = 0, patientName, diagnosis, consultationDate, track;
 const images = [];
 
+const video = document.getElementById('video');
+const previewCanvas = document.getElementById('previewCanvas');
+const previewCtx = previewCanvas.getContext('2d');
+
 async function initCamera() {
-  stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
   video.srcObject = stream;
   await video.play();
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  previewCanvas.width = video.videoWidth;
-  previewCanvas.height = video.videoHeight;
   track = stream.getVideoTracks()[0];
 }
 
-async function loadModel() {
-  segmenter = new SelfieSegmentation({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}` });
-  segmenter.setOptions({ modelSelection: 1 });
-  segmenter.onResults(results => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
-    ctx.globalCompositeOperation = 'source-in';
-    ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-    ctx.globalCompositeOperation = 'destination-atop';
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-  });
+function updateInstruction() {
+  document.getElementById('instruction').innerText = `Capture: ${steps[currentStep]}`;
 }
 
-function animate() { segmenter.send({ image: video }); requestAnimationFrame(animate); }
-
-function updateInstruction() { document.getElementById('instruction').innerText = `Capture: ${steps[currentStep]}`; }
-
-function showPreview() {
-  previewCtx.drawImage(canvas, 0, 0);
+function captureFrame() {
+  previewCanvas.width = video.videoWidth;
+  previewCanvas.height = video.videoHeight;
+  previewCtx.drawImage(video, 0, 0);
   document.getElementById('previewSection').style.display = 'block';
 }
 
@@ -105,21 +82,30 @@ document.getElementById('startAppBtn').onclick = async () => {
   patientName = document.getElementById('patientName').value;
   diagnosis = document.getElementById('diagnosis').value;
   consultationDate = document.getElementById('consultationDate').value;
-  patientForm.style.display = 'none'; mainApp.style.display = 'block';
+  document.getElementById('patientForm').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
   document.getElementById('patientInfo').innerHTML = `<b>${patientName}</b> | ${diagnosis} | ${consultationDate}`;
   await initCamera();
-  await loadModel();
-  animate();
   updateInstruction();
 };
 
-document.getElementById('captureBtn').onclick = showPreview;
-document.getElementById('confirmBtn').onclick = () => { images.push(previewCanvas.toDataURL()); document.getElementById('previewSection').style.display = 'none'; nextStep(); };
-document.getElementById('retryBtn').onclick = () => { document.getElementById('previewSection').style.display = 'none'; };
-document.getElementById('saveBtn').onclick = () => {
-  const zip = new JSZip(); images.forEach((img, idx) => zip.file(`photo_${steps[idx]}.png`, img.split(',')[1], { base64: true }));
+captureBtn.onclick = captureFrame;
+confirmBtn.onclick = () => { images.push(previewCanvas.toDataURL()); previewSection.style.display = 'none'; nextStep(); };
+retryBtn.onclick = () => { previewSection.style.display = 'none'; };
+saveBtn.onclick = () => {
+  const zip = new JSZip();
+  images.forEach((img, idx) => zip.file(`photo_${steps[idx]}.png`, img.split(',')[1], { base64: true }));
   zip.generateAsync({ type: "blob" }).then(content => saveAs(content, `${patientName}_${diagnosis}_${consultationDate}.zip`));
 };
+
+zoomControl.oninput = e => track.applyConstraints({ advanced: [{ zoom: e.target.value }] });
+let flashOn = false;
+toggleFlash.onclick = () => {
+  flashOn = !flashOn;
+  track.applyConstraints({ advanced: [{ torch: flashOn }] });
+  toggleFlash.textContent = flashOn ? 'Désactiver Flash' : 'Activer Flash';
+};
 </script>
+
 </body>
 </html>
