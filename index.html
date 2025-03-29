@@ -62,7 +62,7 @@ let segmenter, track, stream;
 const images = [];
 
 async function initCamera() {
-  stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } });
+  stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
   video.srcObject = stream;
   await video.play();
   canvas.width = video.videoWidth;
@@ -70,13 +70,6 @@ async function initCamera() {
   previewCanvas.width = video.videoWidth;
   previewCanvas.height = video.videoHeight;
   track = stream.getVideoTracks()[0];
-  document.getElementById('zoomControl').oninput = e => track.applyConstraints({ advanced: [{ zoom: e.target.value }] });
-  let flashOn = false;
-  document.getElementById('toggleFlash').onclick = () => {
-    flashOn = !flashOn;
-    track.applyConstraints({ advanced: [{ torch: flashOn }] });
-    document.getElementById('toggleFlash').textContent = flashOn ? 'Désactiver Flash' : 'Activer Flash';
-  };
 }
 
 async function loadModel() {
