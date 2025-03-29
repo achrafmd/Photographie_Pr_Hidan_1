@@ -1,34 +1,119 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Application Photographie Consultation Professeur Hidan</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix@2.2.0/dist/body-pix.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <style>
+    body { font-family: Arial; text-align: center; margin: 0; padding: 20px; background: #f7f7f7; }
+    h1 { margin-bottom: 10px; }
+    #patientForm { max-width: 400px; margin: 20px auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; background: #fff; }
+    #patientForm input, #patientForm textarea { width: 90%; padding: 8px; margin: 8px 0; border: 1px solid #ccc; border-radius: 4px; }
+    button { padding: 10px 20px; font-size: 16px; margin: 10px; cursor: pointer; }
+    canvas { width: 80%; max-width: 600px; border: 2px solid #ccc; border-radius: 8px; }
+  </style>
+</head>
+<body>
+
+<h1>Application Photographie Consultation Professeur Hidan</h1>
+
+<div id="patientForm">
+  <h2>Informations Patient</h2>
+  <input type="text" id="patientName" placeholder="Nom du patient" required />
+  <textarea id="diagnosis" placeholder="Diagnostic" rows="3" required></textarea>
+  <input type="date" id="consultationDate" required />
+  <button id="startAppBtn">Démarrer la consultation</button>
+</div>
+
+<div id="mainApp" style="display:none;">
+  <div id="patientInfo"></div>
+  <h3 id="instruction"></h3>
+  <canvas id="outputCanvas"></canvas>
+  <div>
+    <label>Zoom: <input type="range" id="zoomControl" min="1" max="3" step="0.1" value="1"></label>
+    <button id="toggleFlash">Activer Flash</button>
+  </div>
+  <button id="captureBtn">Capturer l'image</button>
+  <div id="previewSection" style="display:none;">
+    <h4>Aperçu :</h4>
+    <canvas id="previewCanvas"></canvas><br>
+    <button id="confirmBtn">Confirmer</button>
+    <button id="retryBtn">Refaire</button>
+  </div>
+  <button id="saveBtn" style="display:none;">Sauvegarder (Télécharger ZIP)</button>
+</div>
+
+<script>
+let currentStep = 0, patientName, diagnosis, consultationDate, track, net;
+const steps = ["Face repos entier", "Bandeau orbitaire", "Face repos", "Regard haut", "Regard bas", "Profil droit", "Profil gauche", "3/4 droit", "3/4 gauche"];
+const images = [];
+const video = document.createElement('video');
+const canvas = document.getElementById('outputCanvas');
+const ctx = canvas.getContext('2d');
+const previewCanvas = document.getElementById('previewCanvas');
+const previewCtx = previewCanvas.getContext('2d');
+
 async function initCamera() {
-  stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
   video.srcObject = stream;
   await video.play();
+  track = stream.getVideoTracks()[0];
+}
+
+async function loadBodyPix() {
+  net = await bodyPix.load();
+}
+
+async function renderVideo() {
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
-  previewCanvas.width = video.videoWidth;
-  previewCanvas.height = video.videoHeight;
-  track = stream.getVideoTracks()[0];
-
-  const capabilities = track.getCapabilities();
-  if (capabilities.zoom) {
-    document.getElementById('zoomControl').min = capabilities.zoom.min;
-    document.getElementById('zoomControl').max = capabilities.zoom.max;
-    document.getElementById('zoomControl').step = capabilities.zoom.step || 0.1;
-    document.getElementById('zoomControl').value = capabilities.zoom.min;
-    document.getElementById('zoomControl').oninput = e => 
-      track.applyConstraints({ advanced: [{ zoom: e.target.value }] });
-  } else {
-    document.getElementById('zoomControl').style.display = 'none';
-  }
-
-  let flashOn = false;
-  document.getElementById('toggleFlash').onclick = async () => {
-    const capabilities = track.getCapabilities();
-    if (capabilities.torch) {
-      flashOn = !flashOn;
-      await track.applyConstraints({ advanced: [{ torch: flashOn }] });
-      document.getElementById('toggleFlash').textContent = flashOn ? 'Désactiver Flash' : 'Activer Flash';
-    } else {
-      alert("Flash non disponible sur cet appareil.");
+  const segmentation = await net.segmentPerson(video, {internalResolution:'medium', segmentationThreshold:0.75});
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(video,0,0);
+  const imgData = ctx.getImageData(0,0,canvas.width,canvas.height);
+  for(let i=0;i<segmentation.data.length;i++){
+    if(segmentation.data[i]===0){
+      imgData.data[i*4]=255;
+      imgData.data[i*4+1]=255;
+      imgData.data[i*4+2]=255;
     }
-  };
+  }
+  ctx.putImageData(imgData,0,0);
+  requestAnimationFrame(renderVideo);
 }
+
+document.getElementById('startAppBtn').onclick=async()=>{
+  patientName=document.getElementById('patientName').value;
+  diagnosis=document.getElementById('diagnosis').value;
+  consultationDate=document.getElementById('consultationDate').value;
+  document.getElementById('patientForm').style.display='none';
+  document.getElementById('mainApp').style.display='block';
+  document.getElementById('patientInfo').innerHTML=`<b>${patientName}</b> | ${diagnosis} | ${consultationDate}`;
+  await initCamera();
+  await loadBodyPix();
+  renderVideo();
+  document.getElementById('instruction').innerText=`Capture: ${steps[currentStep]}`;
+};
+
+captureBtn.onclick=()=>{
+  previewCanvas.width=canvas.width;
+  previewCanvas.height=canvas.height;
+  previewCtx.drawImage(canvas,0,0);
+  previewSection.style.display='block';
+};
+
+confirmBtn.onclick=()=>{images.push(previewCanvas.toDataURL());previewSection.style.display='none';currentStep++;if(currentStep>=steps.length)saveBtn.style.display='block';else document.getElementById('instruction').innerText=`Capture: ${steps[currentStep]}`;};
+retryBtn.onclick=()=>{previewSection.style.display='none';};
+saveBtn.onclick=()=>{const zip=new JSZip();images.forEach((img,idx)=>zip.file(`photo_${steps[idx]}.png`,img.split(',')[1],{base64:true}));zip.generateAsync({type:"blob"}).then(content=>saveAs(content,`${patientName}_${diagnosis}_${consultationDate}.zip`));};
+
+zoomControl.oninput=e=>track.applyConstraints({advanced:[{zoom:e.target.value}]});
+let flashOn=false;
+toggleFlash.onclick=()=>{flashOn=!flashOn;track.applyConstraints({advanced:[{torch:flashOn}]});toggleFlash.textContent=flashOn?'Désactiver Flash':'Activer Flash';};
+</script>
+
+</body>
+</html>
